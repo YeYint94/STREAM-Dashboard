@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>STREAM Project · CRVA Village Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{
+    --txt:#eef4ff;
+    --muted:rgba(238,244,255,.62);
+    --muted2:rgba(238,244,255,.42);
+    --accent:#6ee7d7;
+    --accent2:#8ab4ff;
+    --warn:#ffcc66;
+    --danger:#ff9db0;
+    --stroke:rgba(255,255,255,.18);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;min-height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue","Segoe UI",Roboto,Arial,sans-serif;
+    color:var(--txt);
+    background:#070d16;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    overflow-x:hidden;
+  }
+  /* ---------- animated liquid background ---------- */
+  .bg{position:fixed;inset:0;z-index:-2;
+    background:
+      radial-gradient(1200px 800px at 8% -5%, #123a4a 0%, transparent 60%),
+      radial-gradient(1000px 700px at 92% 5%, #2a1b4d 0%, transparent 62%),
+      radial-gradient(900px 900px at 50% 105%, #0d3b3b 0%, transparent 65%),
+      linear-gradient(160deg,#060b13,#0b1626 45%,#07101a);
+  }
+  .blob{position:fixed;border-radius:50%;filter:blur(90px);opacity:.5;z-index:-1;pointer-events:none;}
+  .b1{width:520px;height:520px;left:-120px;top:-80px;background:#1fb6a6;animation:float 20s ease-in-out infinite;}
+  .b2{width:460px;height:460px;right:-100px;top:120px;background:#5a6cff;animation:float 26s ease-in-out infinite reverse;}
+  .b3{width:600px;height:600px;left:35%;bottom:-260px;background:#0f8f7a;animation:float 32s ease-in-out infinite;}
+  @keyframes float{
+    0%,100%{transform:translate3d(0,0,0) scale(1);}
+    33%{transform:translate3d(60px,-40px,0) scale(1.08);}
+    66%{transform:translate3d(-50px,50px,0) scale(.95);}
+  }
+
+  /* ---------- glass ---------- */
+  .glass{
+    background:linear-gradient(145deg, rgba(255,255,255,.13), rgba(255,255,255,.045));
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border:1px solid var(--stroke);
+    border-radius:26px;
+    box-shadow:
+      0 24px 70px rgba(0,0,0,.42),
+      inset 0 1px 0 rgba(255,255,255,.34),
+      inset 0 -1px 0 rgba(255,255,255,.06);
+  }
+
+  .wrap{max-width:1560px;margin:0 auto;padding:18px 20px 70px;display:flex;flex-direction:column;gap:16px;}
+
+  /* ---------- top bar ---------- */
+  .topbar{display:flex;align-items:center;gap:16px;padding:14px 20px;position:sticky;top:10px;z-index:60;}
+  .logo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;font-size:20px;font-weight:700;
+    background:linear-gradient(135deg,#6ee7d7,#8ab4ff);color:#06202a;
+    box-shadow:0 10px 28px rgba(110,231,215,.35);flex:none;}
+  .brand h1{font-size:16px;font-weight:650;margin:0;letter-spacing:-.25px;}
+  .brand h1 span{color:var(--muted2);font-weight:400;}
+  .brand p{margin:2px 0 0;font-size:11.5px;color:var(--muted);letter-spacing:.02em;}
+  .searchwrap{flex:1;display:flex;justify-content:flex-end;}
+  #search{
+    width:min(360px,100%);padding:11px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.16);
+    background:rgba(255,255,255,.07);color:var(--txt);font-size:13.5px;outline:none;
+    font-family:inherit;backdrop-filter:blur(10px);transition:.2s;
+  }
+  #search::placeholder{color:rgba(238,244,255,.42);}
+  #search:focus{border-color:rgba(110,231,215,.6);box-shadow:0 0 0 3px rgba(110,231,215,.14);background:rgba(255,255,255,.11);}
+
+  /* ---------- KPI ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px;}
+  .kpi{padding:15px 17px;border-radius:22px;position:relative;overflow:hidden;}
+  .kpi::after{content:"";position:absolute;inset:auto -30% -60% auto;width:120px;height:120px;border-radius:50%;
+    background:radial-gradient(circle,rgba(110,231,215,.22),transparent 70%);}
+  .kpi .k{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);}
+  .kpi .val{font-size:26px;font-weight:600;letter-spacing:-.6px;margin-top:5px;font-variant-numeric:tabular-nums;}
+  .kpi .sub{font-size:11.5px;color:var(--muted);margin-top:3px;}
+
+  /* ---------- toolbar ---------- */
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;border-radius:22px;}
+  .toolbar .label{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted2);margin-right:2px;}
+  .chip{
+    border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:var(--txt);
+    padding:7px 13px;border-radius:999px;font-size:12.5px;cursor:pointer;font-family:inherit;
+    transition:.18s;white-space:nowrap;
+  }
+  .chip:hover{background:rgba(255,255,255,.13);}
+  .chip.active{
+    background:linear-gradient(135deg,rgba(110,231,215,.34),rgba(138,180,255,.3));
+    border-color:rgba(110,231,215,.72);color:#eafffb;font-weight:600;
+    box-shadow:0 6px 20px rgba(110,231,215,.2);
+  }
+  .divider{width:1px;height:22px;background:rgba(255,255,255,.14);margin:0 4px;}
+
+  /* ---------- layout ---------- */
+  .main{display:grid;grid-template-columns:1.32fr 1fr;gap:16px;align-items:start;}
+  .lower{display:grid;grid-template-columns:1.25fr 1fr;gap:16px;align-items:start;}
+  @media(max-width:1080px){.main,.lower{grid-template-columns:1fr;}}
+
+  .card{padding:16px 18px;border-radius:26px;min-width:0;}
+  .card h2{font-size:13.5px;font-weight:650;margin:0 0 12px;letter-spacing:-.2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .card h2 small{font-weight:400;color:var(--muted);font-size:11.5px;}
+
+  /* ---------- map ---------- */
+  .map-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;}
+  .legend{display:flex;align-items:center;gap:12px;font-size:11.5px;color:var(--muted);}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:middle;}
+  .dot.rec{background:#6ee7d7;box-shadow:0 0 10px #6ee7d7;}
+  .dot.pot{background:#ffcc66;box-shadow:0 0 10px #ffcc66;}
+  #map{height:520px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.12);}
+  .leaflet-container{background:#0a1522;font-family:inherit;}
+  .leaflet-tooltip.tt{
+    background:rgba(10,20,32,.85);backdrop-filter:blur(14px);color:#eef4ff;border:1px solid rgba(255,255,255,.18);
+    border-radius:10px;font-size:11.5px;padding:5px 9px;box-shadow:0 8px 24px rgba(0,0,0,.5);
+  }
+  .leaflet-tooltip.tt::before{display:none;}
+
+  /* ---------- village list ---------- */
+  .list-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+  #sort{
+    appearance:none;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:var(--txt);
+    border-radius:12px;padding:7px 12px;font-size:12px;font-family:inherit;outline:none;cursor:pointer;
+  }
+  #sort option{background:#0d1724;color:#eef4ff;}
+  .list{max-height:560px;overflow-y:auto;padding-right:6px;}
+  .list::-webkit-scrollbar{width:7px;}
+  .list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:99px;}
+  .list::-webkit-scrollbar-track{background:transparent;}
+
+  .vcard{
+    width:100%;text-align:left;border:1px solid rgba(255,255,255,.11);
+    background:linear-gradient(145deg,rgba(255,255,255,.075),rgba(255,255,255,.03));
+    border-radius:18px;padding:13px 15px;margin-bottom:9px;cursor:pointer;color:inherit;
+    transition:.2s;font-family:inherit;display:block;
+  }
+  .vcard:hover{background:rgba(255,255,255,.13);transform:translateY(-1px);border-color:rgba(110,231,215,.45);
+    box-shadow:0 12px 30px rgba(0,0,0,.35);}
+  .vrow1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;}
+  .vname{font-size:14px;font-weight:620;letter-spacing:-.2px;}
+  .vsub{font-size:11px;color:var(--muted);margin-top:2px;}
+  .badge{font-size:10px;padding:4px 9px;border-radius:999px;white-space:nowrap;font-weight:600;letter-spacing:.02em;}
+  .badge.rec{background:rgba(110,231,215,.16);color:#9ff5e8;border:1px solid rgba(110,231,215,.4);}
+  .badge.pot{background:rgba(255,204,102,.15);color:#ffdd9b;border:1px solid rgba(255,204,102,.4);}
+  .vstats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:11px;}
+  .vstats div{display:flex;flex-direction:column;}
+  .vstats b{font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;}
+  .vstats span{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted2);margin-top:1px;}
+  .prio{display:flex;align-items:center;gap:9px;margin-top:11px;}
+  .pbar{flex:1;height:5px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden;}
+  .pbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#6ee7d7,#8ab4ff);}
+  .prio span{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;}
+
+  /* ---------- summary table ---------- */
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th{text-align:left;font-weight:600;color:var(--muted);font-size:10.5px;letter-spacing:.07em;
+     text-transform:uppercase;padding:8px 8px;border-bottom:1px solid rgba(255,255,255,.12);}
+  td{padding:9px 8px;border-bottom:1px solid rgba(255,255,255,.06);font-variant-numeric:tabular-nums;}
+  tr:last-child td{border-bottom:none;}
+  tbody tr:hover td{background:rgba(255,255,255,.045);}
+  .num{text-align:right;}
+  .pill{display:inline-block;min-width:22px;text-align:center;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:600;}
+  .pill.warn{background:rgba(255,204,102,.16);color:#ffdd9b;}
+  .pill.bad{background:rgba(255,157,176,.16);color:#ffc0cc;}
+  .pill.ok{background:rgba(110,231,215,.14);color:#9ff5e8;}
+
+  /* ---------- insights ---------- */
+  .insights{display:flex;flex-direction:column;gap:10px;}
+  .ins{padding:13px 15px;border-radius:18px;border:1px solid rgba(255,255,255,.11);
+       background:linear-gradient(145deg,rgba(255,255,255,.07),rgba(255,255,255,.025));}
+  .ins .t{font-size:12.5px;font-weight:650;display:flex;align-items:center;gap:7px;margin-bottom:5px;}
+  .ins .b{font-size:12px;color:var(--muted);line-height:1.5;}
+  .ins .n{font-size:11px;color:var(--muted2);margin-top:6px;line-height:1.45;}
+  .tag{width:7px;height:7px;border-radius:50%;flex:none;}
+
+  /* ---------- modal ---------- */
+  .overlay{
+    position:fixed;inset:0;z-index:1000;display:none;align-items:flex-start;justify-content:center;
+    padding:34px 18px;overflow-y:auto;
+    background:rgba(4,8,16,.55);
+    backdrop-filter:blur(16px) saturate(140%);
+    -webkit-backdrop-filter:blur(16px) saturate(140%);
+  }
+  .overlay.open{display:flex;animation:fade .22s ease;}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .sheet{width:100%;max-width:1000px;padding:26px 28px 30px;border-radius:30px;animation:pop .28s cubic-bezier(.2,.9,.3,1.2);}
+  @keyframes pop{from{transform:translateY(18px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+  .sheet-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;}
+  .sheet-head h3{margin:0;font-size:24px;font-weight:680;letter-spacing:-.7px;}
+  .sheet-head .meta{font-size:12px;color:var(--muted);margin-top:4px;}
+  .closeBtn{
+    border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:var(--txt);
+    width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:16px;line-height:1;
+    display:grid;place-items:center;transition:.18s;flex:none;font-family:inherit;
+  }
+  .closeBtn:hover{background:rgba(255,255,255,.18);transform:rotate(90deg);}
+
+  .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(98px,1fr));gap:9px;margin-top:18px;}
+  .stat{padding:11px 12px;border-radius:15px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);}
+  .stat .l{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted2);}
+  .stat .v{font-size:17px;font-weight:620;margin-top:3px;font-variant-numeric:tabular-nums;}
+  .stat .v small{font-size:11px;font-weight:400;color:var(--muted);}
+
+  .sect{margin-top:22px;}
+  .sect h4{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;font-weight:600;}
+
+  .barrow{display:grid;grid-template-columns:132px 1fr 78px;gap:10px;align-items:center;margin-bottom:7px;font-size:12px;}
+  .barrow .nm{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .track{height:8px;border-radius:99px;background:rgba(255,255,255,.09);overflow:hidden;}
+  .track i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,rgba(110,231,215,.85),rgba(138,180,255,.85));}
+  .barrow .vv{text-align:right;font-variant-numeric:tabular-nums;color:var(--txt);font-size:11.5px;}
+  .barrow .vv small{color:var(--muted2);}
+
+  .orgcard{padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.09);margin-bottom:8px;}
+  .orgcard .oh{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:650;margin-bottom:5px;}
+  .orgcard .ob{font-size:12px;color:var(--muted);line-height:1.5;}
+  .orgdot{width:8px;height:8px;border-radius:50%;flex:none;}
+
+  .clist{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px;}
+  .contact{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
+    padding:10px 13px;border-radius:14px;background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.09);
+  }
+  .contact .cn{font-size:12.5px;font-weight:600;}
+  .contact .cp{font-size:10.5px;color:var(--muted2);margin-top:2px;letter-spacing:.02em;}
+  .contact a{
+    font-size:11.5px;padding:6px 11px;border-radius:999px;text-decoration:none;white-space:nowrap;
+    background:linear-gradient(135deg,rgba(110,231,215,.26),rgba(138,180,255,.22));
+    border:1px solid rgba(110,231,215,.45);color:#d9fffb;font-weight:600;transition:.18s;
+    font-variant-numeric:tabular-nums;
+  }
+  .contact a:hover{background:linear-gradient(135deg,rgba(110,231,215,.45),rgba(138,180,255,.4));}
+  .contact a.na{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);color:var(--muted2);cursor:default;}
+
+  .mapbtn{
+    display:inline-flex;align-items:center;gap:6px;font-size:11.5px;text-decoration:none;
+    padding:8px 14px;border-radius:999px;color:#d9fffb;font-weight:600;
+    background:linear-gradient(135deg,rgba(110,231,215,.26),rgba(138,180,255,.22));
+    border:1px solid rgba(110,231,215,.45);
+  }
+  .mapbtn:hover{background:linear-gradient(135deg,rgba(110,231,215,.45),rgba(138,180,255,.4));}
+
+  .empty{padding:40px 16px;text-align:center;color:var(--muted2);font-size:13px;}
+  .footnote{font-size:11px;color:var(--muted2);text-align:center;padding:6px 0 0;line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+
+<div class="wrap">
+
+  <!-- ================= TOP BAR ================= -->
+  <header class="topbar glass">
+    <div class="logo">◈</div>
+    <div class="brand">
+      <h1>STREAM Project <span>·</span> CRVA Village Dashboard</h1>
+      <p>Mandalay Region · 8 Townships · 20 CRVA Assessment Villages</p>
+    </div>
+    <div class="searchwrap">
+      <input id="search" type="search" placeholder="Search village, township, VT or village code…" autocomplete="off"/>
+    </div>
+  </header>
+
+  <!-- ================= KPI ================= -->
+  <section class="kpis" id="kpis"></section>
+
+  <!-- ================= TOOLBAR ================= -->
+  <section class="toolbar glass">
+    <span class="label">Township</span>
+    <div id="townChips" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    <div class="divider"></div>
+    <span class="label">Status</span>
+    <div id="statusChips" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    <div class="divider"></div>
+    <button class="chip" id="resetBtn">↺ Reset</button>
+  </section>
+
+  <!-- ================= MAP + LIST ================= -->
+  <section class="main">
+    <div class="card glass">
+      <div class="map-head">
+        <h2>Village map <small id="mapCount">—</small></h2>
+        <div class="legend">
+          <span><i class="dot rec"></i>Recommended</span>
+          <span><i class="dot pot"></i>Potential</span>
+          <span style="color:var(--muted2)">· size = population</span>
+        </div>
+      </div>
+      <div id="map"></div>
+    </div>
+
+    <div class="card glass">
+      <div class="list-head">
+        <h2 style="margin:0;">Villages <small id="listCount">—</small></h2>
+        <select id="sort">
+          <option value="priority">Sort: Priority</option>
+          <option value="name">Sort: Name A–Z</option>
+          <option value="pop">Sort: Population</option>
+          <option value="hh">Sort: Households</option>
+          <option value="labour">Sort: Daily labour %</option>
+        </select>
+      </div>
+      <div class="list" id="list"></div>
+    </div>
+  </section>
+
+  <!-- ================= SUMMARY + INSIGHTS ================= -->
+  <section class="lower">
+    <div class="card glass">
+      <h2>Township summary <small>filtered selection</small></h2>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Township</th><th class="num">Villages</th><th class="num">HH</th>
+              <th class="num">Population</th><th class="num">Female</th>
+              <th class="num">Preg + PWD</th><th class="num">EWPR gap</th><th class="num">No activity</th>
+            </tr>
+          </thead>
+          <tbody id="sumBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card glass">
+      <h2>Decision insights <small>auto-generated</small></h2>
+      <div class="insights" id="insights"></div>
+    </div>
+  </section>
+
+  <p class="footnote">
+    Population of STREAM Project Targeted Villages · Update Village List (SAR-2026) · Village Contact for CRVA ·
+    CRVA recommended &amp; potential village coordinates. Priority score is a relative composite of labour reliance,
+    inclusion load (pregnant + PWD), child load (under-2 &amp; 2–4 yrs), EWPR team gap and intervention gap.
+  </p>
+</div>
+
+<!-- ================= MODAL ================= -->
+<div class="overlay" id="overlay">
+  <div class="sheet glass" id="sheet"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* =========================================================
+   1. DATA
+   ========================================================= */
+const TOWNSHIPS = {
+  "Kyaukse":  [21.7251850711711, 96.6035798507834],
+  "Meiktila": [20.8282873963088, 95.7496123346527],
+  "Myittha":  [21.3419380345163, 96.2129944771254],
+  "Nyaung-U": [21.0861463870414, 95.0198813994214],
+  "Sintgaing":[21.7498266194945, 96.1394492698126],
+  "Tada-U":   [21.6929565874819, 95.9012400349479],
+  "Wundwin":  [21.1999866760436, 95.9993767992097],
+  "Madaya":   [22.2052615214806, 96.1789083240963]
+};
+
+const SEED = "Seed production, FFS, provision of agri-input and technology";
+const CLTS = "CLTS, latrine materials support, PLA session, NAD campaign, NSA package distribution, native chicken distribution";
+const DRR  = "DRR, bookkeeping for VDC, FCRM";
+const WATER= "Water point for agriculture and drip irrigation, technical meeting / training";
+
+const VILLAGES = [
+  {id:"dway-hla",sr:1,township:"Kyaukse",vt:"Dway Hla",name:"Dway Hla",vcode:"190440",status:"Recommended",
+   lat:21.64644051,lng:96.00797272,hh:264,m:403,f:546,
+   live:{daily:90,farmer:146,craft:6,livestock:16,shop:3,garden:1,other:2},
+   preg:3,pwd:40,u2:{m:11,f:17},y24:{m:9,f:14},
+   ip:["WHH","GGG","CMMDA"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:"",WHH:DRR}},
+
+  {id:"nyaung-pin-zauk",sr:2,township:"Kyaukse",vt:"Kyaung Pan Kone",name:"Nyaung Pin Zauk",vcode:"190455",status:"Recommended",
+   lat:21.64635086,lng:96.0447998,approx:true,hh:111,m:175,f:212,
+   live:{daily:21,farmer:83,craft:4,livestock:0,shop:3,garden:0,other:0},
+   preg:6,pwd:7,u2:{m:2,f:4},y24:{m:5,f:11},
+   ip:["WHH","GGG","CMMDA"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:"",WHH:DRR}},
+
+  {id:"kaung-tin",sr:3,township:"Kyaukse",vt:"Kyee Eik",name:"Kaung Tin",vcode:"190444",status:"Recommended",
+   lat:21.61152077,lng:96.02722931,hh:324,m:569,f:663,
+   live:{daily:108,farmer:172,craft:6,livestock:32,shop:6,garden:0,other:0},
+   preg:7,pwd:11,u2:{m:11,f:29},y24:{m:12,f:22},
+   ip:["WHH","GGG","CMMDA"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:"",WHH:DRR}},
+
+  {id:"koke-ko-kone",sr:4,township:"Meiktila",vt:"Koke Ko Kone",name:"Koke Ko Kone",vcode:"193920",status:"Potential",
+   lat:20.75702095,lng:95.93881989,hh:356,m:630,f:744,
+   live:{daily:96,farmer:196,craft:29,livestock:4,shop:22,garden:1,other:8},
+   preg:4,pwd:11,u2:{m:9,f:14},y24:{m:18,f:22},
+   ip:["WHH","GGG","CMMDA"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:"",WHH:DRR}},
+
+  {id:"kwet-nge",sr:5,township:"Meiktila",vt:"Kwet Nge",name:"Kwet Nge",vcode:"193978",status:"Recommended",
+   lat:20.78476906,lng:95.94339752,hh:150,m:227,f:305,
+   live:{daily:52,farmer:81,craft:3,livestock:1,shop:9,garden:0,other:4},
+   preg:5,pwd:20,u2:{m:6,f:4},y24:{m:6,f:5},
+   ip:["WHH","GGG","CMMDA","FANSS"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:WATER,WHH:DRR}},
+
+  {id:"pan-tin",sr:6,township:"Meiktila",vt:"Kwet Nge",name:"Pan Tin",vcode:"193980",status:"Recommended",
+   lat:20.78552055,lng:95.95063782,hh:73,m:114,f:161,
+   live:{daily:17,farmer:53,craft:0,livestock:1,shop:0,garden:2,other:0},
+   preg:0,pwd:2,u2:{m:0,f:0},y24:{m:4,f:3},
+   ip:["WHH","GGG","CMMDA","FANSS"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:WATER,WHH:DRR}},
+
+  {id:"daing",sr:7,township:"Myittha",vt:"Mya Na Di (Daing)",name:"Daing",vcode:"191018",status:"Recommended",
+   lat:21.30341911,lng:96.28083801,hh:264,m:502,f:549,
+   live:{daily:49,farmer:134,craft:1,livestock:2,shop:3,garden:0,other:75},
+   preg:7,pwd:5,u2:{m:21,f:21},y24:{m:8,f:20},
+   ip:["WHH","GGG","CMMDA","FANSS"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:"CFW (cash-for-work)",WHH:DRR}},
+
+  {id:"pyi-lone-ant",sr:8,township:"Myittha",vt:"Mya Na Di (Daing)",name:"Pyi Lone Ant",vcode:"191015",status:"Recommended",
+   lat:21.32350922,lng:96.29950714,hh:265,m:564,f:561,
+   live:{daily:159,farmer:91,craft:1,livestock:4,shop:8,garden:0,other:2},
+   preg:12,pwd:20,u2:{m:14,f:14},y24:{m:17,f:21},
+   ip:["WHH","GGG","CMMDA"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:"",WHH:DRR}},
+
+  {id:"hpyu-htwar",sr:9,township:"Nyaung-U",vt:"Htee Pu",name:"Hpyu Htwar",vcode:"192405",status:"Recommended",
+   lat:20.994451,lng:95.083439,hh:111,m:200,f:261,
+   live:{daily:27,farmer:81,craft:0,livestock:0,shop:3,garden:0,other:2},
+   preg:7,pwd:4,u2:{m:7,f:7},y24:{m:4,f:13},
+   ip:["WHH","FANSS","CMMDA"],ewpr:"Not Formed",
+   act:{GGG:"",CMMDA:"Waterpoint install or rehabilitate",FANSS:"NBS, CFW",WHH:DRR}},
+
+  {id:"kyoet-pin-thar",sr:10,township:"Nyaung-U",vt:"Htee Pu",name:"Kyoet Pin Thar",vcode:"192409",status:"Recommended",
+   lat:21.00962067,lng:95.09394836,hh:108,m:214,f:281,
+   live:{daily:38,farmer:62,craft:0,livestock:2,shop:2,garden:4,other:5},
+   preg:19,pwd:8,u2:{m:7,f:7},y24:{m:2,f:13},
+   ip:["WHH","FANSS"],ewpr:"Not Formed",
+   act:{GGG:"",CMMDA:"",FANSS:"NBS, CFW, water point for agriculture and drip irrigation, technical meeting / training, local material support",WHH:DRR}},
+
+  {id:"yae-kin-kone",sr:11,township:"Sintgaing",vt:"Htan Taw",name:"Yae Kin Kone",vcode:"190768",status:"Recommended",
+   lat:21.75522995,lng:96.02559662,hh:194,m:290,f:361,
+   live:{daily:58,farmer:107,craft:10,livestock:8,shop:5,garden:1,other:5},
+   preg:6,pwd:10,u2:{m:11,f:16},y24:{m:1,f:10},
+   ip:["WHH","GGG","CMMDA"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:"",WHH:DRR}},
+
+  {id:"kan-swei",sr:12,township:"Sintgaing",vt:"Kan Swei",name:"Kan Swei",vcode:"190802",status:"Recommended",
+   lat:21.74695015,lng:96.05336761,hh:149,m:310,f:284,
+   live:{daily:52,farmer:67,craft:1,livestock:0,shop:6,garden:0,other:23},
+   preg:1,pwd:6,u2:{m:10,f:4},y24:{m:17,f:7},
+   ip:["WHH","GGG","CMMDA"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:"",WHH:DRR}},
+
+  {id:"koke-ko-kan",sr:13,township:"Tada-U",vt:"Pyar",name:"Koke Ko Kan",vcode:"191128",status:"Recommended",
+   lat:21.71579933,lng:95.91866302,hh:281,m:472,f:643,
+   live:{daily:86,farmer:178,craft:2,livestock:10,shop:1,garden:0,other:4},
+   preg:14,pwd:21,u2:{m:22,f:18},y24:{m:18,f:34},
+   ip:["WHH","GGG","CMMDA","FANSS"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:WATER,WHH:DRR}},
+
+  {id:"shwe-moe-myay",sr:14,township:"Tada-U",vt:"Shwe Moe Myay",name:"Shwe Moe Myay",vcode:"191110",status:"Recommended",
+   lat:21.61416054,lng:95.97859955,hh:394,m:754,f:833,
+   live:{daily:50,farmer:294,craft:3,livestock:44,shop:2,garden:0,other:1},
+   preg:16,pwd:12,u2:{m:13,f:14},y24:{m:18,f:16},
+   ip:["WHH","GGG","CMMDA","FANSS"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:WATER,WHH:DRR}},
+
+  {id:"wun-pa-tayt-south",sr:15,township:"Tada-U",vt:"Thea Maung Kan",name:"Wun Pa Tayt (South)",vcode:"191152",status:"Potential",
+   lat:21.73443031,lng:96.0118866,hh:229,m:426,f:474,
+   live:{daily:135,farmer:55,craft:12,livestock:19,shop:5,garden:3,other:0},
+   preg:6,pwd:16,u2:{m:6,f:10},y24:{m:15,f:9},
+   ip:["WHH","GGG","CMMDA","FANSS"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:WATER,WHH:DRR}},
+
+  {id:"aung-thar",sr:16,township:"Wundwin",vt:"Kaing",name:"Aung Thar",vcode:"194710",status:"Recommended",
+   lat:21.34433937,lng:96.10767365,hh:109,m:221,f:266,
+   live:{daily:28,farmer:72,craft:3,livestock:3,shop:2,garden:1,other:0},
+   preg:6,pwd:8,u2:{m:6,f:5},y24:{m:14,f:7},
+   ip:["WHH","GGG","CMMDA"],ewpr:"Already Formed",
+   act:{GGG:SEED,CMMDA:CLTS,FANSS:"",WHH:DRR}},
+
+  {id:"sin-chi-taing",sr:17,township:"Wundwin",vt:"Sin Chi Taing",name:"Sin Chi Taing",vcode:"194565",status:"Recommended",
+   lat:21.37085915,lng:96.09980774,hh:208,m:404,f:447,
+   live:{daily:48,farmer:148,craft:1,livestock:9,shop:2,garden:0,other:0},
+   preg:1,pwd:9,u2:{m:14,f:16},y24:{m:15,f:13},
+   ip:["WHH","GGG","CMMDA"],ewpr:"Already Formed",
+   act:{GGG:"",CMMDA:"",FANSS:"",WHH:""}},
+
+  {id:"kan-lel-khon",sr:18,township:"Madaya",vt:"Si Taing Kan",name:"Kan Lel Khon",vcode:"190050",status:"Potential",
+   lat:22.1728096,lng:96.13937378,hh:185,m:300,f:326,
+   live:{daily:120,farmer:64,craft:0,livestock:0,shop:1,garden:0,other:0},
+   preg:1,pwd:12,u2:{m:8,f:7},y24:{m:14,f:13},
+   ip:["WHH","GGG","CMMDA"],ewpr:"Already Formed",
+   act:{GGG:"",CMMDA:"",FANSS:"",WHH:""}},
+
+  {id:"tha-lun-hpyu",sr:19,township:"Madaya",vt:"Tha Lun Hpyu",name:"Tha Lun Hpyu",vcode:"190141",status:"Recommended",
+   lat:22.10692024,lng:96.11451721,hh:177,m:337,f:358,
+   live:{daily:140,farmer:30,craft:0,livestock:7,shop:0,garden:0,other:0},
+   preg:5,pwd:12,u2:{m:16,f:11},y24:{m:21,f:10},
+   ip:["WHH","GGG","CMMDA"],ewpr:"Already Formed",
+   act:{GGG:"",CMMDA:"",FANSS:"",WHH:""}},
+
+  {id:"tha-min-twin",sr:20,township:"Madaya",vt:"Tha Min Twin",name:"Tha Min Twin",vcode:"190059",status:"Recommended",
+   lat:22.18104312,lng:96.13443499,hh:407,m:679,f:759,
+   live:{daily:238,farmer:163,craft:4,livestock:1,shop:1,garden:0,other:0},
+   preg:11,pwd:20,u2:{m:17,f:18},y24:{m:28,f:28},
+   ip:["WHH","GGG","CMMDA"],ewpr:"Already Formed",
+   act:{GGG:"",CMMDA:"",FANSS:"",WHH:""}}
+];
+
+/* ---------- contacts (Township|Village) ---------- */
+const C = {
+"Kyaukse|Dway Hla":[["U Than Lwin","Patron","09675005788"],["U Nay Win","VDC Chairman","09256519311"],["U Sein Min","Vice-Chairman","09256006477"],["U Thaung Naing Soe","Treasurer","09256359800"],["Daw Khin San Yu","Accountant","09400180001"]],
+"Kyaukse|Nyaung Pin Zauk":[["U Win Aung","VDC Chairman","9792074681"],["U Htun Shwe","Patron","9446806754"],["U Win Ko","Secretary","9950404294"],["U Khin Mg Chin","Secretary","9791632991"],["Daw Thazin Oo","Accountant","9774151893"]],
+"Kyaukse|Kaung Tin":[["U Myat Tun Naing","VDC Chairman","09779462556"],["U Mg Lay","Patron","09763392571"],["U Win Naing","Secretary","09778655583"],["Daw Tin Mu","DRR Representative","09257039783"],["U Soe Min","Treasurer","09779938036"]],
+"Meiktila|Koke Ko Kone":[["U Thaung","Patron","09672261408"],["U Shwe","VDC Chairman","09696001537"],["U Mya Aye","Treasurer","09684929591"],["U Tin Zaw Oo","Accountant","09688077121"],["Daw Tin Tin Hla","Audit","09674207250"]],
+"Meiktila|Kwet Nge":[["U Yazar","VDC Chairman","09666370556"],["U Aung Kyaw Oo","Secretary","09788346652"],["Daw Thein Gi Aung","Treasurer","09689870709"],["Daw Khin Win Myint","Accountant","09771928184"],["Daw Yi Lae Win","Accountant","09256569617"]],
+"Meiktila|Pan Tin":[["U Maung Maung","VDC Chairman","09795774785"],["U Tun Tun Min","Patron","09787622568"],["Daw Nwel Ni Tun","Secretary","09773399146"],["U Sein Lin","Accountant","09774068543"],["Daw San San Moe","Key Holder","09788242251"]],
+"Myittha|Daing":[["U Kyaw Soe","VDC Chairman","09689414867"],["U Hnin Wai","Patron","09681159496"],["U Min Naing","Secretary","09780068259"],["U Pyone Cho","Treasurer","09444246358"],["U Moe Lay","Accountant","09670942842"]],
+"Myittha|Pyi Lone Ant":[["U Maung Than","VDC Chairman","09664368170"],["U Han Sein","Patron","09788771866"],["U Kyaw Than","Secretary","09792552457"],["Daw Ngal","Treasurer","09688555768"],["Daw Aye Hnin Wai","Accountant","09672769627"]],
+"Nyaung-U|Hpyu Htwar":[["U Aye Lwin","VDC Chairman","09663455436"],["U Tin Tun","Secretary","09778572492"],["Ma Hlaing","Treasurer","09651560669"],["Ma May Zin Hein","Accountant","09677438544"],["U Myint Kyaw","Water Management Rep.","09794897615"],["Ko Myo","Water Management Rep.","09780892939"]],
+"Nyaung-U|Kyoet Pin Thar":[["U War Nu","Chairman","09899033436"],["U Phyo Wai Aung","Secretary","09455552504"],["Daw Thin Thin Htwe","Treasurer","09675702903"],["U Aye Tun","Accountant","09675656246"],["U Kyi Hmone","Water Management Rep.","09452349726"]],
+"Sintgaing|Yae Kin Kone":[["U Kyaw Min","Village Chairman","09797343967"],["U Myint Naing","VDC Chairman","09679595991"],["U Myo Myint","Patron","09778924398"],["U Maung Htwe","Secretary","09797233582"],["Daw Tin Tin Nwel","Casual Rep.","09663119001"],["Daw Yin Tun","Casual Rep.","09794829237"],["U Kyaw Swar Thein","DRR Rep.","09698555841"]],
+"Sintgaing|Kan Swei":[["U Maung Htay","VDC Chairman","09444008476"],["U Tun Min Thein","Patron","09440443887"],["U Tin Oo","Secretary","09695329313"],["U Kyaw Naing","Farmer Rep.","09985990019"],["Daw Myint Myint Than","Farmer Rep.","09797899942"]],
+"Tada-U|Shwe Moe Myay":[["U Kyaw Thu Win","VDC Chairman","09260119128"],["U Khaing Lin","Vice-Chairman","09400565799"],["U Ye Lin Naing","Patron","092004256"],["U Tun Tun Win","Water Management Rep.","09667344672"],["Daw Wai Wai Lwin (Bae Ou)","DRR Rep.","09256227821"],["U Than Htike Aung","DRR Rep.","09440058811"]],
+"Tada-U|Koke Ko Kan":[["U Bo Zan","VDC Chairman","09674145611"],["U Mya Thein Tun","Patron","09"],["U Tun Kyaing","Patron","09670148959"],["U Kuday Phyo","Secretary","09670645180"],["U Thaung Tint","Treasurer","09674617063"],["Daw Than Than Aye","Accountant","09638126002"],["U Chit Ngwe","Water Management Rep.","09665501126"],["U Htay Oo","Water Management Rep.","09668545144"]],
+"Tada-U|Wun Pa Tayt (South)":[["U Min Thu","Village Chairman","0943067934"],["U Khaing Myo","VDC Chairman","09450028303"],["U Thein Zaw","Secretary","09424256807"],["Daw Cho Zin Lae","Treasurer","09256012881"],["Daw Yi Cho","Accountant","09894856655"],["Daw Yadanar Oo","Casual Rep.","09251909273"],["Daw Cho","DRR Rep.","09448478190"],["Daw Wine","Water Management Rep.","09678011727"],["Daw Moet Moet Lwin","Water Management Rep.","09678011727"]],
+"Wundwin|Aung Thar":[["U Aung Than","Patron","09977775390"],["Daw Nyein Yu Wai","VDC Chairman","09400436061"],["U Soe Lwin","Secretary","09688494813"],["U Nan Win Aung","Accountant","09696441172"],["U Ohn Maung","Treasurer","09785555936"],["Daw Aye Moe","DRR Rep.","09683048663"],["Daw Aye Thin","DRR Rep.","09972331690"],["Daw Mar Mar Aye","Casual Rep.","09696308804"]],
+"Wundwin|Sin Chi Taing":[["U Myo Tint","Village Chairman","09265926566"],["U Lu Aye","VDC Chairman","09253469634"],["U Myint Aung","Secretary","09448564231"],["U Nyo Pyar","Farmer Rep.","09258748859"],["Daw Khin Mar Aye","Casual Rep.","09443528662"],["Daw Nyo Sein","DRR Rep.","09698767698"],["U Khin Mg Than","Water Management Rep.","09682004924"]],
+"Madaya|Tha Lun Hpyu":[["U Aye Ko","VDC Chairman","0972254585"],["U Theik Tun","Patron","09684873082"],["U Win Tun","Secretary","09664844541"],["Daw Khin Soe Moe Kyaw","DRR Rep.","09787653562"]],
+"Madaya|Tha Min Twin":[["U Myo Chit","Patron","09699267828"],["U Toe","VDC Chairman","09988433446"],["U Zaw Htwe","Secretary","09987174343"],["U Khine Min Naung","Farmer Rep.","09958837981"],["Daw Maw Maw San","Casual Rep.","09662744381"],["Daw Aye Sandar Oo","DRR Rep.","09980902707"]],
+"Madaya|Kan Lel Khon":[["U Myint Lwin","Patron","09967734979"],["U Mg Khin","VDC Chairman","09981672875"],["U Kyaw Tint","Secretary","09970545010"],["Daw Myint Myint Htwe","Farmer Rep.","09767676580"],["Daw Thin Thin Nwe","Casual Rep.","09989852881"],["U Chit Nan Hmwe","DRR Rep.","09956544624"]]
+};
+
+const ORGS = {
+  GGG:   {color:"#6ee7d7", label:"GGG"},
+  CMMDA: {color:"#8ab4ff", label:"CMMDA"},
+  FANSS: {color:"#ffcc66", label:"FANSS"},
+  WHH:   {color:"#c8a2ff", label:"WHH"}
+};
+const LIVE_LABELS = {
+  daily:"Daily labour", farmer:"Farmer", craft:"Handicraft / Mason / Carpenter",
+  livestock:"Livestock", shop:"Shop", garden:"Home garden", other:"Other"
+};
+
+/* =========================================================
+   2. HELPERS & DERIVED METRICS
+   ========================================================= */
+const fmt = n => (n||0).toLocaleString("en-US");
+const pct = (a,b) => b ? (a/b*100) : 0;
+const contactsOf = v => (C[v.township+"|"+v.name] || []).map(([name,pos,phone])=>({name,pos,phone}));
+const hasAnyAct = v => Object.keys(v.act).some(k => (v.act[k]||"").trim().length>0);
+const telHref = p => {
+  const d = (p||"").replace(/[^\d]/g,"");
+  return d.length >= 7 ? "tel:"+d : null;
+};
+
+VILLAGES.forEach(v=>{
+  v.total = v.m + v.f;
+  v.u2t = v.u2.m + v.u2.f;
+  v.y24t = v.y24.m + v.y24.f;
+  v.labourRate = v.hh ? v.live.daily / v.hh : 0;
+  v.inclusionRate = v.total ? (v.preg + v.pwd) / v.total : 0;
+  v.childRate = v.total ? (v.u2t + v.y24t) / v.total : 0;
+  v.ewprGap = v.ewpr === "Not Formed" ? 1 : 0;
+  v.actGap = hasAnyAct(v) ? 0 : 1;
+  v.contacts = contactsOf(v);
+});
+
+(function computePriority(){
+  const maxL = Math.max(...VILLAGES.map(v=>v.labourRate)) || 1;
+  const maxI = Math.max(...VILLAGES.map(v=>v.inclusionRate)) || 1;
+  const maxC = Math.max(...VILLAGES.map(v=>v.childRate)) || 1;
+  VILLAGES.forEach(v=>{
+    const s = 0.32*(v.labourRate/maxL) + 0.24*(v.inclusionRate/maxI)
+            + 0.16*(v.childRate/maxC) + 0.18*v.ewprGap + 0.10*v.actGap;
+    v.priority = Math.round(s*100);
+  });
+  const sorted = [...VILLAGES].sort((a,b)=>b.priority-a.priority);
+  sorted.forEach((v,i)=>{
+    v.tier = i < 7 ? "High" : (i < 14 ? "Medium" : "Low");
+  });
+})();
+
+/* =========================================================
+   3. STATE
+   ========================================================= */
+const state = { township:"all", status:"all", q:"", sort:"priority" };
+
+function currentList(){
+  const q = state.q.trim().toLowerCase();
+  let list = VILLAGES.filter(v =>
+    (state.township === "all" || v.township === state.township) &&
+    (state.status === "all" || v.status === state.status) &&
+    (!q || (v.name+" "+v.township+" "+v.vt+" "+v.vcode).toLowerCase().includes(q))
+  );
+  const s = state.sort;
+  list.sort((a,b)=>{
+    if (s==="name") return a.name.localeCompare(b.name);
+    if (s==="pop")  return b.total - a.total;
+    if (s==="hh")   return b.hh - a.hh;
+    if (s==="labour") return b.labourRate - a.labourRate;
+    return b.priority - a.priority;
+  });
+  return list;
+}
+
+/* =========================================================
+   4. MAP
+   ========================================================= */
+const map = L.map("map", {zoomControl:true, scrollWheelZoom:false, attributionControl:false})
+             .setView([21.4, 95.9], 8);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {maxZoom:19}).addTo(map);
+map.on("click", ()=> map.scrollWheelZoom.enable());
+map.on("mouseout", ()=> map.scrollWheelZoom.disable());
+const markerLayer = L.layerGroup().addTo(map);
+
+function renderMap(list){
+  markerLayer.clearLayers();
+  const bounds = [];
+  list.forEach(v=>{
+    const col = v.status === "Recommended" ? "#6ee7d7" : "#ffcc66";
+    const r = 6 + Math.sqrt(v.total)/6;
+    const mk = L.circleMarker([v.lat, v.lng], {
+      radius:r, color:col, weight:2, fillColor:col, fillOpacity:.26
+    }).addTo(markerLayer);
+    mk.bindTooltip(`${v.name} · ${v.township} · ${fmt(v.total)} people`, {
+      direction:"top", className:"tt", opacity:1
+    });
+    mk.on("click", ()=> openVillage(v.id));
+    bounds.push([v.lat, v.lng]);
+  });
+  if (bounds.length === 1) {
+    map.setView(bounds[0], 12);
+  } else if (bounds.length > 1) {
+    map.fitBounds(bounds, {padding:[45,45], maxZoom:11});
+  }
+  document.getElementById("mapCount").textContent =
+    `${list.length} village${list.length===1?"":"s"} plotted`;
+}
+
+/* =========================================================
+   5. RENDERERS
+   ========================================================= */
+function renderKpis(list){
+  const src = list.length ? list : VILLAGES;
+  const hh = src.reduce((s,v)=>s+v.hh,0);
+  const pop = src.reduce((s,v)=>s+v.total,0);
+  const fem = src.reduce((s,v)=>s+v.f,0);
+  const preg = src.reduce((s,v)=>s+v.preg,0);
+  const pwd = src.reduce((s,v)=>s+v.pwd,0);
+  const ewprGap = src.filter(v=>v.ewprGap).length;
+  const noAct = src.filter(v=>v.actGap).length;
+  const rec = src.filter(v=>v.status==="Recommended").length;
+  const towns = new Set(src.map(v=>v.township)).size;
+
+  const cards = [
+    {k:"Villages", v:list.length ? `${src.length}<small style="font-size:14px;color:var(--muted)"> / 20</small>` : "20",
+     s:`${rec} recommended · ${src.length-rec} potential`},
+    {k:"Townships", v:towns, s:"Mandalay Region"},
+    {k:"Households", v:fmt(hh), s:"targeted in selection"},
+    {k:"Population", v:fmt(pop), s:`${fmt(Math.round(pop/hh))} people per HH`},
+    {k:"Female share", v:pct(fem,pop).toFixed(1)+"%", s:`${fmt(fem)} of ${fmt(pop)}`},
+    {k:"Pregnant + PWD", v:fmt(preg+pwd), s:`${fmt(preg)} pregnant · ${fmt(pwd)} PWD`},
+    {k:"EWPR not formed", v:ewprGap, s:"team formation required"},
+    {k:"No activity planned", v:noAct, s:"intervention gap"}
+  ];
+  document.getElementById("kpis").innerHTML = cards.map(c=>`
+    <div class="kpi glass">
+      <div class="k">${c.k}</div>
+      <div class="val">${c.v}</div>
+      <div class="sub">${c.s}</div>
+    </div>`).join("");
+}
+
+function renderChips(){
+  const towns = ["all", ...Object.keys(TOWNSHIPS)];
+  document.getElementById("townChips").innerHTML = towns.map(t=>`
+    <button class="chip ${state.township===t?"active":""}" data-town="${t}">
+      ${t==="all" ? "All townships" : t}
+    </button>`).join("");
+
+  const statuses = [["all","All"],["Recommended","Recommended"],["Potential","Potential"]];
+  document.getElementById("statusChips").innerHTML = statuses.map(([val,lab])=>`
+    <button class="chip ${state.status===val?"active":""}" data-status="${val}">${lab}</button>`).join("");
+
+  document.querySelectorAll("[data-town]").forEach(b=>{
+    b.onclick = ()=>{ state.township = b.dataset.town; renderAll(); };
+  });
+  document.querySelectorAll("[data-status]").forEach(b=>{
+    b.onclick = ()=>{ state.status = b.dataset.status; renderAll(); };
+  });
+}
+
+function renderList(list){
+  const el = document.getElementById("list");
+  document.getElementById("listCount").textContent = `${list.length} shown`;
+  if (!list.length){
+    el.innerHTML = `<div class="empty">No villages match the current filters.</div>`;
+    return;
+  }
+  el.innerHTML = list.map(v=>`
+    <button class="vcard" data-id="${v.id}">
+      <div class="vrow1">
+        <div>
+          <div class="vname">${v.name}</div>
+          <div class="vsub">${v.township} · VT ${v.vt} · #${v.vcode}</div>
+        </div>
+        <span class="badge ${v.status==="Recommended"?"rec":"pot"}">${v.status}</span>
+      </div>
+      <div class="vstats">
+        <div><b>${fmt(v.hh)}</b><span>Households</span></div>
+        <div><b>${fmt(v.total)}</b><span>Population</span></div>
+        <div><b>${fmt(v.preg+v.pwd)}</b><span>Preg+PWD</span></div>
+        <div><b>${v.contacts.length}</b><span>Contacts</span></div>
+      </div>
+      <div class="prio">
+        <div class="pbar"><i style="width:${v.priority}%"></i></div>
+        <span>Priority ${v.priority} · ${v.tier}</span>
+      </div>
+    </button>`).join("");
+
+  el.querySelectorAll(".vcard").forEach(b=>{
+    b.onclick = ()=> openVillage(b.dataset.id);
+  });
+}
+
+function renderSummary(list){
+  const body = document.getElementById("sumBody");
+  if (!list.length){
+    body.innerHTML = `<tr><td colspan="8" class="empty">No data for the current filters.</td></tr>`;
+    return;
+  }
+  const groups = {};
+  list.forEach(v=>{
+    const g = groups[v.township] || (groups[v.township] = {
+      n:0, hh:0, pop:0, f:0, vuln:0, ewpr:0, noact:0
+    });
+    g.n++; g.hh += v.hh; g.pop += v.total; g.f += v.f;
+    g.vuln += v.preg + v.pwd; g.ewpr += v.ewprGap; g.noact += v.actGap;
+  });
+  const rows = Object.keys(groups).sort().map(t=>{
+    const g = groups[t];
+    return `<tr>
+      <td><b>${t}</b></td>
+      <td class="num">${g.n}</td>
+      <td class="num">${fmt(g.hh)}</td>
+      <td class="num">${fmt(g.pop)}</td>
+      <td class="num">${pct(g.f,g.pop).toFixed(1)}%</td>
+      <td class="num">${fmt(g.vuln)}</td>
+      <td class="num">${g.ewpr ? `<span class="pill warn">${g.ewpr}</span>` : `<span class="pill ok">0</span>`}</td>
+      <td class="num">${g.noact ? `<span class="pill bad">${g.noact}</span>` : `<span class="pill ok">0</span>`}</td>
+    </tr>`;
+  });
+  const T = Object.values(groups).reduce((a,g)=>({
+    n:a.n+g.n, hh:a.hh+g.hh, pop:a.pop+g.pop, f:a.f+g.f,
+    vuln:a.vuln+g.vuln, ewpr:a.ewpr+g.ewpr, noact:a.noact+g.noact
+  }), {n:0,hh:0,pop:0,f:0,vuln:0,ewpr:0,noact:0});
+
+  rows.push(`<tr style="background:rgba(110,231,215,.07)">
+      <td><b>Total</b></td>
+      <td class="num"><b>${T.n}</b></td>
+      <td class="num"><b>${fmt(T.hh)}</b></td>
+      <td class="num"><b>${fmt(T.pop)}</b></td>
+      <td class="num"><b>${pct(T.f,T.pop).toFixed(1)}%</b></td>
+      <td class="num"><b>${fmt(T.vuln)}</b></td>
+      <td class="num"><b>${T.ewpr}</b></td>
+      <td class="num"><b>${T.noact}</b></td>
+    </tr>`);
+
+  body.innerHTML = rows.join("");
+}
+
+function renderInsights(list){
+  const el = document.getElementById("insights");
+  if (!list.length){
+    el.innerHTML = `<div class="empty">No villages match the current filters.</div>`;
+    return;
+  }
+  const out = [];
+
+  const noEwpr = list.filter(v=>v.ewprGap);
+  if (noEwpr.length){
+    out.push({tone:"#ffcc66", title:"EWPR team formation required",
+      body: noEwpr.map(v=>`${v.name} (${v.township})`).join(" · "),
+      note:"No established Early Warning / Preparedness & Response team — schedule team formation before the CRVA rollout."});
+  }
+
+  const noAct = list.filter(v=>v.actGap);
+  if (noAct.length){
+    out.push({tone:"#ff9db0", title:"No ongoing / planned project intervention",
+      body: noAct.map(v=>`${v.name} (${v.township})`).join(" · "),
+      note:"These villages have no activity recorded against GGG, CMMDA, FANSS or WHH — highest risk of being under-served."});
+  }
+
+  const top = [...list].sort((a,b)=>b.priority-a.priority).slice(0,3);
+  out.push({tone:"#6ee7d7", title:"Top priority for assessment",
+    body: top.map(v=>`${v.name} — score ${v.priority} (${v.tier})`).join(" · "),
+    note:"Composite of labour reliance, pregnant + PWD load, under-5 child load and service gaps."});
+
+  const lab = [...list].sort((a,b)=>b.labourRate-a.labourRate).slice(0,3);
+  out.push({tone:"#8ab4ff", title:"Highest daily-labour reliance",
+    body: lab.map(v=>`${v.name} — ${Math.round(v.labourRate*100)}% of households`).join(" · "),
+    note:"Strong candidates for cash-for-work (CFW) and short-cycle livelihood support."});
+
+  const water = list.filter(v=>{
+    const all = Object.values(v.act).join(" ").toLowerCase();
+    return all.includes("water") || all.includes("cfw") || all.includes("nbs");
+  });
+  if (water.length){
+    out.push({tone:"#c8a2ff", title:"Water / CFW / NBS activity villages",
+      body: water.map(v=>v.name).join(" · "),
+      note:"Confirm water-point siting, drip-irrigation design and CFW beneficiary lists during the assessment."});
+  }
+
+  const inc = [...list].sort((a,b)=>b.inclusionRate-a.inclusionRate)[0];
+  if (inc){
+    out.push({tone:"#ffb3c7", title:"Highest inclusion load",
+      body: `${inc.name} (${inc.township}) — ${inc.preg} pregnant + ${inc.pwd} PWD = ${(inc.inclusionRate*100).toFixed(1)}% of population`,
+      note:"Ensure accessible consultation, transport support and representation in the CRVA focus groups."});
+  }
+
+  el.innerHTML = out.map(o=>`
+    <div class="ins">
+      <div class="t"><i class="tag" style="background:${o.tone};box-shadow:0 0 10px ${o.tone}"></i>${o.title}</div>
+      <div class="b">${o.body}</div>
+      <div class="n">${o.note}</div>
+    </div>`).join("");
+}
+
+/* =========================================================
+   6. MODAL
+   ========================================================= */
+const overlay = document.getElementById("overlay");
+const sheet = document.getElementById("sheet");
+
+function barRow(label, value, denom, unitLabel){
+  const p = denom ? Math.min(100, value/denom*100) : 0;
+  return `<div class="barrow">
+      <div class="nm" title="${label}">${label}</div>
+      <div class="track"><i style="width:${p}%"></i></div>
+      <div class="vv">${fmt(value)} <small>${unitLabel}</small></div>
+    </div>`;
+}
+
+function openVillage(id){
+  const v = VILLAGES.find(x=>x.id===id);
+  if (!v) return;
+
+  const maxLive = Math.max(...Object.values(v.live), 1);
+  const liveRows = Object.keys(v.live)
+    .filter(k=>v.live[k] > 0)
+    .sort((a,b)=>v.live[b]-v.live[a])
+    .map(k=>barRow(LIVE_LABELS[k], v.live[k], maxLive, `${Math.round(pct(v.live[k], v.hh))}% HH`))
+    .join("") || `<div class="empty">No livelihood data recorded.</div>`;
+
+  const orgCards = (v.ip || []).map(o=>{
+    const txt = (v.act[o]||"").trim();
+    return `<div class="orgcard">
+      <div class="oh"><i class="orgdot" style="background:${ORGS[o].color};box-shadow:0 0 10px ${ORGS[o].color}"></i>${ORGS[o].label}</div>
+      <div class="ob">${txt ? txt : "<i style='color:var(--muted2)'>No activity recorded</i>"}</div>
+    </div>`;
+  }).join("") || `<div class="empty">No implementing partner recorded.</div>`;
+
+  const contactCards = v.contacts.length ? v.contacts.map(c=>{
+    const href = telHref(c.phone);
+    return `<div class="contact">
+      <div>
+        <div class="cn">${c.name}</div>
+        <div class="cp">${c.pos}</div>
+      </div>
+      ${href
+        ? `<a href="${href}">${c.phone}</a>`
+        : `<a class="na" title="Number not recorded">not recorded</a>`}
+    </div>`;
+  }).join("") : `<div class="empty">No contacts recorded for this village.</div>`;
+
+  sheet.innerHTML = `
+    <div class="sheet-head">
+      <div>
+        <h3>${v.name}</h3>
+        <div class="meta">
+          ${v.township} Township · VT: ${v.vt} · Village Code ${v.vcode}
+          ${v.approx ? " · <i>coordinates approximate (VT centroid)</i>" : ""}
+        </div>
+        <div style="margin-top:11px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <span class="badge ${v.status==="Recommended"?"rec":"pot"}">${v.status}</span>
+          <span class="badge ${v.ewprGap?"pot":"rec"}">EWPR: ${v.ewpr}</span>
+          <span class="badge ${v.actGap?"pot":"rec"}">${v.actGap ? "No intervention planned" : "Intervention planned"}</span>
+          <span class="badge rec">Priority ${v.priority} · ${v.tier}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:9px;align-items:center;">
+        <a class="mapbtn" target="_blank" rel="noopener"
+           href="https://www.google.com/maps?q=${v.lat},${v.lng}">◎ Open in Maps</a>
+        <button class="closeBtn" id="closeBtn" aria-label="Close">✕</button>
+      </div>
+    </div>
+
+    <div class="statgrid">
+      <div class="stat"><div class="l">Households</div><div class="v">${fmt(v.hh)}</div></div>
+      <div class="stat"><div class="l">Population</div><div class="v">${fmt(v.total)}</div></div>
+      <div class="stat"><div class="l">Male</div><div class="v">${fmt(v.m)} <small>${pct(v.m,v.total).toFixed(1)}%</small></div></div>
+      <div class="stat"><div class="l">Female</div><div class="v">${fmt(v.f)} <small>${pct(v.f,v.total).toFixed(1)}%</small></div></div>
+      <div class="stat"><div class="l">Pregnant</div><div class="v">${fmt(v.preg)}</div></div>
+      <div class="stat"><div class="l">PWD</div><div class="v">${fmt(v.pwd)}</div></div>
+      <div class="stat"><div class="l">Under 2 yrs</div><div class="v">${fmt(v.u2t)} <small>${v.u2.m}M / ${v.u2.f}F</small></div></div>
+      <div class="stat"><div class="l">2–4 yrs</div><div class="v">${fmt(v.y24t)} <small>${v.y24.m}M / ${v.y24.f}F</small></div></div>
+    </div>
+
+    <div class="sect">
+      <h4>Main livelihood (households)</h4>
+      ${liveRows}
+    </div>
+
+    <div class="sect">
+      <h4>Inclusion &amp; vulnerability indicators</h4>
+      <div class="statgrid">
+        <div class="stat"><div class="l">Preg + PWD / 1,000</div><div class="v">${Math.round(v.inclusionRate*1000)}</div></div>
+        <div class="stat"><div class="l">Children 0–4 / 1,000</div><div class="v">${Math.round(v.childRate*1000)}</div></div>
+        <div class="stat"><div class="l">Daily labour rate</div><div class="v">${Math.round(v.labourRate*100)}%</div></div>
+        <div class="stat"><div class="l">Contacts listed</div><div class="v">${v.contacts.length}</div></div>
+      </div>
+    </div>
+
+    <div class="sect">
+      <h4>Ongoing / planned project intervention</h4>
+      ${orgCards}
+    </div>
+
+    <div class="sect">
+      <h4>Key contacts for KII / CRVA survey</h4>
+      <div class="clist">${contactCards}</div>
+    </div>
+  `;
+
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+  document.getElementById("closeBtn").onclick = closeModal;
+}
+
+function closeModal(){
+  overlay.classList.remove("open");
+  document.body.style.overflow = "";
+}
+overlay.addEventListener("click", e=>{ if (e.target === overlay) closeModal(); });
+document.addEventListener("keydown", e=>{ if (e.key === "Escape") closeModal(); });
+
+/* =========================================================
+   7. MASTER RENDER
+   ========================================================= */
+function renderAll(){
+  const list = currentList();
+  renderKpis(list);
+  renderChips();
+  renderList(list);
+  renderMap(list);
+  renderSummary(list);
+  renderInsights(list);
+}
+
+document.getElementById("search").addEventListener("input", e=>{
+  state.q = e.target.value;
+  renderAll();
+});
+document.getElementById("sort").addEventListener("change", e=>{
+  state.sort = e.target.value;
+  renderAll();
+});
+document.getElementById("resetBtn").addEventListener("click", ()=>{
+  state.township = "all"; state.status = "all"; state.q = ""; state.sort = "priority";
+  document.getElementById("search").value = "";
+  document.getElementById("sort").value = "priority";
+  renderAll();
+});
+
+renderAll();
+setTimeout(()=> map.invalidateSize(), 250);
+window.addEventListener("resize", ()=> map.invalidateSize());
+</script>
+</body>
+</html>
